@@ -1,0 +1,3 @@
+# Private keys - NEVER commit
+scripts/certs  
+#right now i think i wont push any cert too
