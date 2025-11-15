@@ -1,3 +1,6 @@
 # Private keys - NEVER commit
 scripts/certs  
 #right now i think i wont push any cert too
+
+app/storage/db.py 
+#it has passwords, last time i commited, it didn't have the password

@@ -9,7 +9,7 @@ class UserDB:
         self.conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="",  # Your MySQL password
+            password="R@diant1",  # Your MySQL password
             database="securechat"
         )
         self.cursor = self.conn.cursor()
