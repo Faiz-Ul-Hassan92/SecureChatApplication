@@ -11,17 +11,18 @@ from crypto.pki import load_certificate, load_private_key, validate_certificate,
 from crypto.dh import generate_keypair, compute_shared_secret, derive_aes_key, DH_GENERATOR, DH_PRIME
 from crypto.aes import encrypt_aes, decrypt_aes
 from crypto.sign import sign_message, verify_signature
-from app.common.protocol import ProtocolMessage
+from common.protocol import ProtocolMessage
 from storage.db import UserDB
 from storage.transcript import Transcript
+
 
 class SecureChatServer:
     def __init__(self, host='localhost', port=5000):
         self.host = host
         self.port = port
-        self.server_cert = load_certificate('certs/server-cert.pem')
-        self.server_key = load_private_key('certs/server-key.pem')
-        self.ca_cert = load_certificate('certs/ca-cert.pem')
+        self.server_cert = load_certificate('../scripts/certs/server-cert.pem')
+        self.server_key = load_private_key('../scripts/certs/server-key.pem')
+        self.ca_cert = load_certificate('../scripts/certs/ca-cert.pem')
         self.db = UserDB()
         self.session_key = None
         self.client_cert = None
@@ -107,11 +108,24 @@ class SecureChatServer:
         temp_secret = compute_shared_secret(client_A, temp_dh_private)
         temp_key = derive_aes_key(temp_secret)
         
-        # Receive encrypted register/login
+        # Receive first message (could be get_salt, register, or login)
         auth_data = conn.recv(4096).decode()
         auth_msg = ProtocolMessage.parse(auth_data)
         
-        if auth_msg['type'] == 'register':
+        # Handle salt request for login
+        if auth_msg['type'] == 'get_salt':
+            user = self.db.get_user(auth_msg['email'])
+            if not user:
+                conn.send(json.dumps({"error": "User not found"}).encode())
+                return False
+            salt_b64 = base64.b64encode(user['salt']).decode()
+            conn.send(json.dumps({"salt": salt_b64}).encode())
+            
+            # Now receive actual login
+            auth_data = conn.recv(4096).decode()
+            auth_msg = ProtocolMessage.parse(auth_data)
+        
+        if auth_msg['type'] == 'register': 
             return self.handle_register(conn, auth_msg, temp_key)
         elif auth_msg['type'] == 'login':
             return self.handle_login(conn, auth_msg, temp_key)

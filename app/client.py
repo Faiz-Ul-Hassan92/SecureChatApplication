@@ -20,9 +20,9 @@ class SecureChatClient:
     def __init__(self, host='localhost', port=5000):
         self.host = host
         self.port = port
-        self.client_cert = load_certificate('certs/client-cert.pem')
-        self.client_key = load_private_key('certs/client-key.pem')
-        self.ca_cert = load_certificate('certs/ca-cert.pem')
+        self.client_cert = load_certificate('../scripts/certs/fake-client-cert.pem')
+        self.client_key = load_private_key('../scripts/certs/fake-client-key.pem')
+        self.ca_cert = load_certificate('../scripts/certs/ca-cert.pem')
         self.session_key = None
         self.server_cert = None
         self.transcript = None
@@ -132,13 +132,19 @@ class SecureChatClient:
     
     def login(self, key):
         email = input("Email: ")
+        
+        # Request salt from server first
+        salt_request = json.dumps({"type": "get_salt", "email": email})
+        self.sock.send(salt_request.encode())
+        
+        salt_response = ProtocolMessage.parse(self.sock.recv(4096).decode())
+        if salt_response.get('error'):
+            print(f"[ERROR] {salt_response['error']}")
+            return False
+        
+        salt = base64.b64decode(salt_response['salt'])
+        
         password = getpass("Password: ")
-        
-        # For login, client needs to fetch salt first (simplified here)
-        # In real implementation, server should send salt, then client computes hash
-        # For now, assume client knows salt or server validates differently
-        
-        salt = b''  # Should fetch from server
         pwd_hash = hashlib.sha256(salt + password.encode()).hexdigest()
         
         nonce = base64.b64encode(secrets.token_bytes(16)).decode()
