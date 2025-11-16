@@ -20,8 +20,8 @@ class SecureChatClient:
     def __init__(self, host='localhost', port=5000):
         self.host = host
         self.port = port
-        self.client_cert = load_certificate('../scripts/certs/fake-client-cert.pem')
-        self.client_key = load_private_key('../scripts/certs/fake-client-key.pem')
+        self.client_cert = load_certificate('../scripts/certs/client-cert.pem')
+        self.client_key = load_private_key('../scripts/certs/client-key.pem')
         self.ca_cert = load_certificate('../scripts/certs/ca-cert.pem')
         self.session_key = None
         self.server_cert = None
@@ -180,9 +180,55 @@ class SecureChatClient:
         self.transcript = Transcript(f'transcripts/client_{int(time.time())}.txt')
         return True
     
+    #checking for tempering
+    def test_tampering(self):
+        """Send message with tampered ciphertext - should fail signature verification"""
+        msg_text = "Original message"
+        
+        # Encrypt and sign normally
+        ciphertext = encrypt_aes(msg_text, self.session_key)
+        self.seqno += 1
+        timestamp = int(time.time() * 1000)
+        hash_data = ProtocolMessage.compute_message_hash(self.seqno, timestamp, ciphertext)
+        signature = sign_message(hash_data, self.client_key)
+        
+        # Tamper with ciphertext (flip one character)
+        tampered_ct = ciphertext[:-1] + ('A' if ciphertext[-1] != 'A' else 'B')
+        
+        print(f"[TEST] Sending tampered message (flipped bit in ciphertext)...")
+        msg_json = ProtocolMessage.create_message(self.seqno, timestamp, tampered_ct, signature)
+        self.sock.send(msg_json.encode())
+        
+        # Server should reject with SIG_FAIL
+
+
+    # for checking replay attack 
+
+    def test_replay_attack(self):
+        """Send the same message twice with same seqno"""
+        msg_text = "I am checking this message, I will send it again to test replay"
+        
+        # First send (normal)
+        ciphertext = encrypt_aes(msg_text, self.session_key)
+        self.seqno += 1
+        timestamp = int(time.time() * 1000)
+        hash_data = ProtocolMessage.compute_message_hash(self.seqno, timestamp, ciphertext)
+        signature = sign_message(hash_data, self.client_key)
+        msg_json = ProtocolMessage.create_message(self.seqno, timestamp, ciphertext, signature)
+        
+        print("[TEST] Sending message first time...")
+        self.sock.send(msg_json.encode())
+        time.sleep(1)
+        
+        # Replay (same seqno!)
+        print("[TEST] Replaying same message...")
+        self.sock.send(msg_json.encode())  # Send again
+        
+        # Server should reject with REPLAY error
+
     def data_plane(self):
         """Encrypted chat"""
-        print("[CHAT] Type messages (or 'exit' to quit):")
+        print("[CHAT] Type messages (or 'exit' to quit, 'replay_test' for replay attack, or 'test_tampering'):")
         
         while True:
             msg_text = input("You: ")
@@ -191,6 +237,14 @@ class SecureChatClient:
                 self.sock.send(json.dumps({"type": "exit"}).encode())
                 break
             
+            if msg_text.lower() == 'replay_test':
+                self.test_replay_attack()  # Call test
+                continue
+
+            if msg_text.lower() == 'test_tampering':
+                self.test_tampering()  # Call test
+                continue
+
             # Encrypt message
             ciphertext = encrypt_aes(msg_text, self.session_key)
             
@@ -231,3 +285,15 @@ class SecureChatClient:
 if __name__ == "__main__":
     client = SecureChatClient()
     client.connect()
+
+
+
+
+
+
+
+
+
+
+
+
